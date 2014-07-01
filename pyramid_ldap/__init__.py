@@ -87,7 +87,8 @@ class _LDAPQuery(object):
         for entries matching parameters in kw.
 
         Skip the real query and return an hard-coded result based on string
-        interpolation of ``base_dn`` if the ``filter_tmpl`` attribute is empty"""
+        interpolation of ``base_dn`` if the ``filter_tmpl`` attribute
+        is empty"""
         search_filter = self.filter_tmpl % kw
         search_base = self.base_dn % kw
         if search_filter:
@@ -128,7 +129,7 @@ class Connector(object):
         self.login_qry_identif = _registry_identifier('ldap_login_query', context)
         self.group_qry_identif = _registry_identifier('ldap_groups_query', context)
 
-    def authenticate(self, login, password):
+    def authenticate(self, login='', password=''):
         """ Given a login name and a password, return a tuple of ``(dn,
         attrdict)`` if the matching user if the user exists and his password
         is correct.  Otherwise return ``None``.
@@ -138,19 +139,30 @@ class Connector(object):
         dictionary mapping LDAP user attributes to sequences of values.  The
         keys and values in the dictionary values provided will be decoded
         from UTF-8, recursively, where possible.  The dictionary returned is
-        a case-insensitive dictionary implemenation.
+        a case-insensitive dictionary implementation.
+
+        A zero length password will always be considered invalid since it
+        results in a request for "unauthenticated authentication" which should
+        not be used for LDAP based authentication. See `section 5.1.2 of
+        RFC-4513 <http://tools.ietf.org/html/rfc4513#section-5.1.2>`_ for a
+        description of this behavior.
 
         If :meth:`pyramid.config.Configurator.ldap_set_login_query` was not
         called, using this function will raise an
         :exc:`pyramid.exceptions.ConfiguratorError`."""
+        if password == '':
+            return None
+            
         search = getattr(self.registry, self.login_qry_identif, None)
         if search is None:
             raise ConfigurationError(
                 'ldap_set_login_query was not called during setup')
         
         try:
-            login = login or ''
-            escaped_login = ldap.filter.escape_filter_chars(login)
+            if login:
+                escaped_login = ldap.filter.escape_filter_chars(login)
+            else:
+                escaped_login = ''
             with self.manager.connection() as conn:
                 result = search.execute(conn, login=escaped_login, password=password, sizelimit=1)
                 if len(result) == 1:
